@@ -103,7 +103,7 @@ x-shared-env: &shared-api-worker-env
   BAIDU_OBS_SECRET_KEY: ${BAIDU_OBS_SECRET_KEY:-}
   BAIDU_OBS_ACCESS_KEY: ${BAIDU_OBS_ACCESS_KEY:-}
   BAIDU_OBS_ENDPOINT: ${BAIDU_OBS_ENDPOINT:-}
-  VECTOR_STORE: ${VECTOR_STORE:-weaviate}
+  VECTOR_STORE: ${VECTOR_STORE:-milvus}
   WEAVIATE_ENDPOINT: ${WEAVIATE_ENDPOINT:-http://weaviate:8080}
   WEAVIATE_API_KEY: ${WEAVIATE_API_KEY:-WVF5YThaHlkYwhGUSmCRgsX3tD5ngdN8pkih}
   QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
@@ -116,7 +116,7 @@ x-shared-env: &shared-api-worker-env
   COUCHBASE_PASSWORD: ${COUCHBASE_PASSWORD:-password}
   COUCHBASE_BUCKET_NAME: ${COUCHBASE_BUCKET_NAME:-Embeddings}
   COUCHBASE_SCOPE_NAME: ${COUCHBASE_SCOPE_NAME:-_default}
-  MILVUS_URI: ${MILVUS_URI:-http://127.0.0.1:19530}
+  MILVUS_URI: ${MILVUS_URI:-http://milvus-standalone:19530}
   MILVUS_TOKEN: ${MILVUS_TOKEN:-}
   MILVUS_USER: ${MILVUS_USER:-root}
   MILVUS_PASSWORD: ${MILVUS_PASSWORD:-Milvus}
@@ -274,6 +274,7 @@ services:
   # API service
   api:
     image: langgenius/dify-api:0.10.2
+    #image: langgenius/dify-api:latest
     restart: always
     environment:
       # Use the shared environment variables.
@@ -294,6 +295,7 @@ services:
   # The Celery worker for processing the queue.
   worker:
     image: langgenius/dify-api:0.10.2
+    #image: langgenius/dify-api:latest
     restart: always
     environment:
       # Use the shared environment variables.
@@ -331,6 +333,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-difyai123456}
       POSTGRES_DB: ${POSTGRES_DB:-dify}
       PGDATA: ${PGDATA:-/var/lib/postgresql/data/pgdata}
+    ports:
+      - "5432:5432"
     command: >
       postgres -c 'max_connections=${POSTGRES_MAX_CONNECTIONS:-100}'
                -c 'shared_buffers=${POSTGRES_SHARED_BUFFERS:-128MB}'
@@ -352,12 +356,15 @@ services:
     volumes:
       # Mount the redis data directory to the container.
       - ./volumes/redis/data:/data
+    ports:
+      - "6379:6379"
     # Set the redis password when startup redis server.
     command: redis-server --requirepass ${REDIS_PASSWORD:-difyai123456}
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
 
   # The DifySandbox
+  # 提供安全的代码环境
   sandbox:
     image: langgenius/dify-sandbox:0.2.10
     restart: always
@@ -382,6 +389,7 @@ services:
   # ssrf_proxy server
   # for more information, please refer to
   # https://docs.dify.ai/learn-more/faq/install-faq#id-18.-why-is-ssrf_proxy-needed
+  #代理服务器和缓存服务器
   ssrf_proxy:
     image: ubuntu/squid:latest
     restart: always
@@ -666,7 +674,7 @@ services:
 
   milvus-standalone:
     container_name: milvus-standalone
-    image: milvusdb/milvus:v2.3.1
+    image: milvusdb/milvus:v2.5.5
     profiles:
       - milvus
     command: ['milvus', 'run', 'standalone']
@@ -688,6 +696,20 @@ services:
     ports:
       - 19530:19530
       - 9091:9091
+    networks:
+      - milvus
+
+  attu:
+    container_name: attu
+    image: zilliz/attu:v2.3.1
+    profiles:
+      - milvus
+    environment:
+      MILVUS_URL: ${MILVUS_URL:-milvus-standalone:19530}
+    depends_on:
+      - milvus-standalone
+    ports:
+      - 3000:3000
     networks:
       - milvus
 
@@ -797,6 +819,32 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    restart: always
+    # //模型存储地方
+    volumes:
+      - ./volumes/ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["all"]
+              capabilities: [gpu]
+    #restart: unless-stopped  # 根据需要选择重启策略
+    #command: ["ollama"]  # 如果需要在启动时运行特定的命令，可以在这里指定
+
+  ollama-webui:
+    image: ghcr.io/ollama-webui/ollama-webui:main
+    container_name: ollama-webui
+    ports:
+      - "18080:8080"
+    restart: always
 
   # unstructured .
   # (if used, you need to set ETL_TYPE to Unstructured in the api & worker service.)

@@ -7,7 +7,16 @@ WORKDIR /app/api
 ENV POETRY_VERSION=1.8.3
 
 # if you located in China, you can use aliyun mirror to speed up
-# RUN pip install --no-cache-dir poetry==${POETRY_VERSION} -i https://mirrors.aliyun.com/pypi/simple/
+RUN echo "deb http://mirrors.aliyun.com/debian/ bookworm main non-free non-free-firmware contrib" > /etc/apt/sources.list
+RUN echo "deb-src http://mirrors.aliyun.com/debian/ bookworm main non-free non-free-firmware contrib" >> /etc/apt/sources.list
+RUN echo "deb http://mirrors.aliyun.com/debian-security/ bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list
+RUN echo "deb-src http://mirrors.aliyun.com/debian-security/ bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list
+
+# 配置PyPI阿里源
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
+    && pip config set install.trusted-host mirrors.aliyun.com
+# 更新包列表
+RUN apt-get update
 
 RUN pip install --no-cache-dir poetry==${POETRY_VERSION}
 
@@ -21,7 +30,10 @@ ENV POETRY_REQUESTS_TIMEOUT=15
 FROM base AS packages
 
 # if you located in China, you can use aliyun mirror to speed up
-# RUN sed -i 's@deb.debian.org@mirrors.aliyun.com@g' /etc/apt/sources.list.d/debian.sources
+#RUN echo "deb http://mirrors.aliyun.com/debian/ bookworm main non-free non-free-firmware contrib" > /etc/apt/sources.list
+#RUN echo "deb-src http://mirrors.aliyun.com/debian/ bookworm main non-free non-free-firmware contrib" >> /etc/apt/sources.list
+#RUN echo "deb http://mirrors.aliyun.com/debian-security/ bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list
+#RUN echo "deb-src http://mirrors.aliyun.com/debian-security/ bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc g++ libc-dev libffi-dev libgmp-dev libmpfr-dev libmpc-dev
@@ -51,11 +63,12 @@ WORKDIR /app/api
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl nodejs libgmp-dev libmpfr-dev libmpc-dev \
     # if you located in China, you can use aliyun mirror to speed up
-    # && echo "deb http://mirrors.aliyun.com/debian testing main" > /etc/apt/sources.list \
-    && echo "deb http://deb.debian.org/debian testing main" > /etc/apt/sources.list \
+#     && echo "deb http://mirrors.aliyun.com/debian testing main" > /etc/apt/sources.list \
+#    && echo "deb http://deb.debian.org/debian testing main" > /etc/apt/sources.list \
     && apt-get update \
     # For Security
-    && apt-get install -y --no-install-recommends expat=2.6.3-2 libldap-2.5-0=2.5.18+dfsg-3+b1 perl=5.40.0-6 libsqlite3-0=3.46.1-1 zlib1g=1:1.3.dfsg+really1.3.1-1+b1 \
+    #&& apt-get install -y --no-install-recommends expat=2.6.3-2 libldap-2.5-0=2.5.18+dfsg-3+b1 perl=5.40.0-6 libsqlite3-0=3.46.1-1 zlib1g=1:1.3.dfsg+really1.3.1-1+b1 \
+    && apt-get install -y --no-install-recommends expat libldap-2.5-0 perl libsqlite3-0 zlib1g \
     # install a chinese font to support the use of tools like matplotlib
     && apt-get install -y fonts-noto-cjk \
     && apt-get autoremove -y \
@@ -77,7 +90,7 @@ COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 
-ARG COMMIT_SHA
+#ARG COMMIT_SHA
 ENV COMMIT_SHA=${COMMIT_SHA}
-
 ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]
+#CMD ["tail", "-f", "/dev/null"]
